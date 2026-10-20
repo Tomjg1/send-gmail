@@ -6,7 +6,7 @@ import "core:fmt"
 import "core:encoding/base64"
 import "vendor:curl"
 
-containsCstring :: proc(a: [^]cstring, needle: cstring) -> bool {
+contains_cstring :: proc(a: [^]cstring, needle: cstring) -> bool {
     for i := 0; a[i] != nil; i += 1 {
         if runtime.cstring_eq(a[i], needle) {
             return false
@@ -15,15 +15,34 @@ containsCstring :: proc(a: [^]cstring, needle: cstring) -> bool {
     return true
 }
 
+write_callback :: proc "c" (buffer: [^]u8, _: uint, ntimes: uint, output:rawptr) {
+    context := runtime.context
+    output := transmute(^string)output
+    
+    return 0
+}
+
 main_impl :: proc () -> bool {
+    if curl.global_init(curl.GLOBAL_SSL) != curl.code.E_OK {
+        fmt.eprintln("FATAL ERROR: error initializing curl.")
+        return true
+    }
     version_data := curl.version_info(curl.VERSION_NOW)
     if version_data.ssl_version == nil {
         fmt.eprintln("FATAL ERROR: libcurl does not support SSL/TLS.")
         return true
-    } else if (containsCstring(version_data.protocols, "http")) {
-        fmt.eprintln("FATAL ERROR: libcurl does not support HTTP.")
+    } else if (contains_cstring(version_data.protocols, "https")) {
+        fmt.eprintln("FATAL ERROR: libcurl does not support HTTPS.")
         return true
     }
+    handle := curl.easy_init()
+    if handle == nil {
+        fmt.eprintln("FATAL ERROR: handle could not be created.")
+        return true
+    }
+    curl.easy_setopt(handle, curl.option.URL, "http://localhost:8000/test.txt")
+    curl.easy_setopt(handle, curl.option.WRITEFUNCTION, write_callback)
+
     return false
 }
 
